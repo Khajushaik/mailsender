@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Send mail to many</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1c2430; --muted: #66707f;
+    --line: #d9dee5; --accent: #2457d6; --accent-dark: #1a44ad;
+    --ok: #17794a; --err: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151a; --card: #1b2028; --text: #e8ecf2; --muted: #98a2b3;
+      --line: #2e3643; --accent: #6b93ff; --accent-dark: #86a7ff;
+      --ok: #4cc38a; --err: #ff8a80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 32px 16px;
+  }
+  main { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  form { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+  fieldset { border: 0; padding: 0; margin: 0 0 20px; }
+  legend { font-weight: 600; margin-bottom: 12px; padding: 0; }
+  label { display: block; font-size: .9rem; margin: 0 0 14px; }
+  label span { display: block; margin-bottom: 4px; font-weight: 500; }
+  small { color: var(--muted); font-weight: 400; }
+  input, textarea {
+    width: 100%; padding: 10px 12px; font: inherit; color: var(--text);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px;
+  }
+  textarea { resize: vertical; min-height: 140px; }
+  input:focus, textarea:focus, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .count { color: var(--muted); font-size: .9rem; }
+  button {
+    background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+    padding: 12px 22px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:hover { background: var(--accent-dark); }
+  button:disabled { opacity: .6; cursor: wait; }
+  .help { font-size: .85rem; color: var(--muted); margin-top: -6px; }
+  #result { margin-top: 20px; padding: 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); display: none; }
+  #result.show { display: block; }
+  #result.error { border-color: var(--err); color: var(--err); }
+  #result h2 { font-size: 1rem; margin: 0 0 6px; }
+  #result .ok { color: var(--ok); }
+  #result .bad { color: var(--err); }
+  #result ul { margin: 6px 0 0; padding-left: 20px; font-size: .9rem; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Send mail to many</h1>
+  <p class="sub">Write one email and send it to everyone on your list in one click.</p>
+
+  <form id="form" autocomplete="off">
+    <fieldset>
+      <legend>Your Gmail account</legend>
+      <label><span>Your email</span>
+        <input type="email" id="email" placeholder="you@gmail.com" required>
+      </label>
+      <label><span>App password</span>
+        <input type="password" id="pass" placeholder="16-character app password" required>
+      </label>
+      <p class="help">Use a Gmail app password, not your normal password. Turn on 2-Step Verification, then create one at myaccount.google.com/apppasswords.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Your message</legend>
+      <label><span>Subject</span>
+        <input type="text" id="subject" required>
+      </label>
+      <label><span>Message</span>
+        <textarea id="message" required></textarea>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Recipients</legend>
+      <label><span>Email addresses <small>(separate with commas or new lines)</small></span>
+        <textarea id="recipients" placeholder="ravi@example.com, sita@example.com" required></textarea>
+      </label>
+    </fieldset>
+
+    <div class="row">
+      <span class="count" id="count">0 recipients</span>
+      <button type="submit" id="send">Send emails</button>
+    </div>
+  </form>
+
+  <div id="result" role="status" aria-live="polite"></div>
+</main>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function parse() {
+    return [...new Set($("recipients").value.split(/[\s,;]+/).map(s => s.trim().toLowerCase()).filter(Boolean))];
+  }
+  $("recipients").addEventListener("input", () => {
+    const list = parse();
+    const valid = list.filter(a => EMAIL_RE.test(a)).length;
+    const bad = list.length - valid;
+    $("count").textContent = `${valid} recipient${valid === 1 ? "" : "s"}` + (bad ? ` (${bad} invalid)` : "");
+  });
+
+  function esc(s) { return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  function show(html, isError) {
+    const r = $("result");
+    r.className = "show" + (isError ? " error" : "");
+    r.innerHTML = html;
+    r.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  $("form").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = $("send");
+    btn.disabled = true; btn.textContent = "Sending…";
+    $("result").className = "";
+
+    try {
+      const res = await fetch("/api/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: $("email").value.trim(),
+          appPassword: $("pass").value,
+          subject: $("subject").value,
+          message: $("message").value,
+          recipients: $("recipients").value
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) { show(esc(data.error || "Something went wrong."), true); return; }
+
+      let html = `<h2 class="ok">Sent to ${data.sent.length} recipient${data.sent.length === 1 ? "" : "s"}</h2>`;
+      if (data.failed.length) {
+        html += `<h2 class="bad">Failed (${data.failed.length})</h2><ul>` +
+          data.failed.map(f => `<li>${esc(f.to)}: ${esc(f.reason)}</li>`).join("") + "</ul>";
+      }
+      if (data.invalid.length) {
+        html += `<h2 class="bad">Skipped invalid addresses (${data.invalid.length})</h2><ul>` +
+          data.invalid.map(a => `<li>${esc(a)}</li>`).join("") + "</ul>";
+      }
+      show(html, false);
+    } catch (err) {
+      show("Could not reach the server. Make sure it is running.", true);
+    } finally {
+      btn.disabled = false; btn.textContent = "Send emails";
+    }
+  });
+</script>
+</body>
+</html>

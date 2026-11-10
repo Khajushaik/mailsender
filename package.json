@@ -1,0 +1,11 @@
+{
+  "name": "mail-sender",
+  "version": "1.0.0",
+  "description": "Send one email to many recipients using Gmail SMTP",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": {
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14"
+  }
+}
